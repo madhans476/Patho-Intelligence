@@ -32,6 +32,7 @@ Overall completion percentages are additive and sum to 100% across all phases. T
 
 **Completion:** 10%
 
+**Status:** Done 
 ---
 
 ## Phase 2 — Baseline Model Training
