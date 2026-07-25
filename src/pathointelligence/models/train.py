@@ -8,6 +8,7 @@ import torch
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
+import mlflow
 
 from pathointelligence.data.dataset import PCamDataset
 from pathointelligence.data.transforms import train_transform, eval_transform
@@ -62,40 +63,60 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"using device: {device}")
 
-    data_dir = Path("data/raw")
-    train_ds = PCamDataset(data_dir, split="train", transform=train_transform)
-    train_ds = Subset(train_ds, range(5000))
-    train_loader = DataLoader(train_ds, batch_size=64, shuffle=True, num_workers=2)
+    # settings gathered in one place, so we can log them AND use them — avoids typing the same value twice and them drifting out of sync
+    config = {
+        "backbone": "resnet50",
+        "batch_size": 64,
+        "learning_rate": 1e-3,
+        "num_epochs": 3,
+        "train_subset_size": 5000,
+        "valid_subset_size": 1000,
+    }
 
-    eval_ds = PCamDataset(data_dir, split="valid", transform=eval_transform)
-    eval_ds = Subset(eval_ds, range(1000))
-    eval_loader = DataLoader(eval_ds, batch_size=64, shuffle=False, num_workers=2)
+    mlflow.set_experiment("pcam-baseline")
 
-    model = build_model("resnet50", pretrained=True)
-    freeze_backbone(model)
-    model = model.to(device)
+    with mlflow.start_run():
+        mlflow.log_params(config)  # records all settings for this run
 
-    loss_fn = torch.nn.BCEWithLogitsLoss()
-    trainable_params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.Adam(trainable_params, lr=1e-3)
+        data_dir = Path("data/raw")
+        train_ds = PCamDataset(data_dir, split="train", transform=train_transform)
+        train_ds = Subset(train_ds, range(config["train_subset_size"]))
+        train_loader = DataLoader(train_ds, batch_size=config["batch_size"], shuffle=True, num_workers=2)
 
-    checkpoint_path = Path("models/checkpoints/best_model.pt")
-    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-    best_auroc = 0.0
+        eval_ds = PCamDataset(data_dir, split="valid", transform=eval_transform)
+        eval_ds = Subset(eval_ds, range(config["valid_subset_size"]))
+        eval_loader = DataLoader(eval_ds, batch_size=config["batch_size"], shuffle=False, num_workers=2)
 
-    num_epochs = 3  # small, just to see checkpointing behave across epochs — real run happens on Kaggle later
+        model = build_model(config["backbone"], pretrained=True)
+        freeze_backbone(model)
+        model = model.to(device)
 
-    for epoch in range(1, num_epochs + 1):
-        avg_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
-        auroc = evaluate(model, eval_loader, device)
-        print(f"epoch {epoch}: train loss={avg_loss:.4f}, val AUROC={auroc:.4f}")
+        loss_fn = torch.nn.BCEWithLogitsLoss()
+        trainable_params = [p for p in model.parameters() if p.requires_grad]
+        optimizer = torch.optim.Adam(trainable_params, lr=config["learning_rate"])
 
-        if auroc > best_auroc:
-            best_auroc = auroc
-            torch.save(model.state_dict(), checkpoint_path)
-            print(f"  -> new best AUROC ({auroc:.4f}), checkpoint saved")
+        checkpoint_path = Path("models/checkpoints/best_model.pt")
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        best_auroc = 0.0
 
-    print(f"\nbest validation AUROC: {best_auroc:.4f}")
+        for epoch in range(1, config["num_epochs"] + 1):
+            avg_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
+            auroc = evaluate(model, eval_loader, device)
+            print(f"epoch {epoch}: train loss={avg_loss:.4f}, val AUROC={auroc:.4f}")
+
+            # log_metric with step=epoch lets MLflow plot these as a curve, not just a final number
+            mlflow.log_metric("train_loss", avg_loss, step=epoch)
+            mlflow.log_metric("val_auroc", auroc, step=epoch)
+
+            if auroc > best_auroc:
+                best_auroc = auroc
+                torch.save(model.state_dict(), checkpoint_path)
+                print(f"  -> new best AUROC ({auroc:.4f}), checkpoint saved")
+
+        mlflow.log_metric("best_val_auroc", best_auroc)
+        mlflow.log_artifact(str(checkpoint_path))  # copies the actual .pt file into this run's MLflow record
+
+        print(f"\nbest validation AUROC: {best_auroc:.4f}")
 
 
 if __name__ == "__main__":
