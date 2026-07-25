@@ -1,1 +1,5 @@
 data/raw/*
+__pycache__/
+*.py[cod]
+*pyc
+models/checkpoints/*

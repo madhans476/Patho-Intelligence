@@ -19,7 +19,8 @@ PCAM_STD = (0.2003, 0.2660, 0.1920)
 #! During training, you want randomness — random flips, rotations, maybe slight color jitter — so the model sees a slightly different version of each patch every epoch (this is data augmentation, and it's what makes the model generalize instead of memorize).
 train_transform = A.Compose(
     [
-        A.Flip(p=0.5),
+        A.HorizontalFlip(p=0.5),
+        A.VerticalFlip(p=0.5),
         A.RandomRotate90(p=0.5),
         A.Transpose(p=0.5),
         A.RandomBrightnessContrast(brightness_limit=0.1, contrast_limit=0.1, p=0.3),
