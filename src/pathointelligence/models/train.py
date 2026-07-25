@@ -12,7 +12,7 @@ import mlflow
 
 from pathointelligence.data.dataset import PCamDataset
 from pathointelligence.data.transforms import train_transform, eval_transform
-from pathointelligence.models.architecture import build_model, freeze_backbone
+from pathointelligence.models.architecture import build_model, freeze_backbone, unfreeze_all
 
 
 def train_one_epoch(model, dataloader, loss_fn, optimizer, device) -> float:
@@ -67,8 +67,10 @@ def main() -> None:
     config = {
         "backbone": "resnet50",
         "batch_size": 64,
-        "learning_rate": 1e-3,
-        "num_epochs": 3,
+        "stage1_epochs": 3,
+        "stage1_lr": 1e-3,
+        "stage2_epochs": 3,
+        "stage2_lr": 1e-5,
         "train_subset_size": 5000,
         "valid_subset_size": 1000,
     }
@@ -92,19 +94,20 @@ def main() -> None:
         model = model.to(device)
 
         loss_fn = torch.nn.BCEWithLogitsLoss()
-        trainable_params = [p for p in model.parameters() if p.requires_grad]
-        optimizer = torch.optim.Adam(trainable_params, lr=config["learning_rate"])
 
         checkpoint_path = Path("models/checkpoints/best_model.pt")
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         best_auroc = 0.0
 
-        for epoch in range(1, config["num_epochs"] + 1):
+        # ---- Stage 1: frozen backbone, train only the head ----
+        trainable_params = [p for p in model.parameters() if p.requires_grad]
+        optimizer = torch.optim.Adam(trainable_params, lr=config["stage1_lr"])
+
+        for epoch in range(1, config["stage1_epochs"] + 1):
             avg_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
             auroc = evaluate(model, eval_loader, device)
-            print(f"epoch {epoch}: train loss={avg_loss:.4f}, val AUROC={auroc:.4f}")
+            print(f"[stage 1] epoch {epoch}: train loss={avg_loss:.4f}, val AUROC={auroc:.4f}")
 
-            # log_metric with step=epoch lets MLflow plot these as a curve, not just a final number
             mlflow.log_metric("train_loss", avg_loss, step=epoch)
             mlflow.log_metric("val_auroc", auroc, step=epoch)
 
@@ -113,11 +116,25 @@ def main() -> None:
                 torch.save(model.state_dict(), checkpoint_path)
                 print(f"  -> new best AUROC ({auroc:.4f}), checkpoint saved")
 
-        mlflow.log_metric("best_val_auroc", best_auroc)
-        mlflow.log_artifact(str(checkpoint_path))  # copies the actual .pt file into this run's MLflow record
+        # ---- Stage 2: unfreeze everything, fine-tune with a smaller LR ----
+        unfreeze_all(model)
+        # brand new optimizer — the stage 1 optimizer only ever knew about
+        # the head's parameters; it can't be reused to update the backbone
+        optimizer = torch.optim.Adam(model.parameters(), lr=config["stage2_lr"])
 
-        print(f"\nbest validation AUROC: {best_auroc:.4f}")
+        for epoch in range(1, config["stage2_epochs"] + 1):
+            global_epoch = config["stage1_epochs"] + epoch  # keeps mlflow's x-axis continuous across both stages
+            avg_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
+            auroc = evaluate(model, eval_loader, device)
+            print(f"[stage 2] epoch {epoch}: train loss={avg_loss:.4f}, val AUROC={auroc:.4f}")
 
+            mlflow.log_metric("train_loss", avg_loss, step=global_epoch)
+            mlflow.log_metric("val_auroc", auroc, step=global_epoch)
+
+            if auroc > best_auroc:
+                best_auroc = auroc
+                torch.save(model.state_dict(), checkpoint_path)
+                print(f"  -> new best AUROC ({auroc:.4f}), checkpoint saved")
 
 if __name__ == "__main__":
     main()
