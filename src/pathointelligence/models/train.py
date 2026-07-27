@@ -72,13 +72,13 @@ def main() -> None:
     # settings gathered in one place, so we can log them AND use them — avoids typing the same value twice and them drifting out of sync
     config = {
         "backbone": "resnet50",
-        "batch_size": 64,
+        "batch_size": 128,
         "stage1_epochs": 3,
         "stage1_lr": 1e-3,
         "stage2_epochs": 3,
         "stage2_lr": 1e-5,
-        "train_subset_size": 5000,
-        "valid_subset_size": 1000,
+        # "train_subset_size": 5000,
+        # "valid_subset_size": 1000,
     }
 
     mlflow.set_experiment("pcam-baseline")
@@ -88,12 +88,12 @@ def main() -> None:
 
         data_dir = Path(args.data_dir)
         train_ds = PCamDataset(data_dir, split="train", transform=train_transform)
-        train_ds = Subset(train_ds, range(config["train_subset_size"]))
-        train_loader = DataLoader(train_ds, batch_size=config["batch_size"], shuffle=True, num_workers=2)
+        # train_ds = Subset(train_ds, range(config["train_subset_size"]))
+        train_loader = DataLoader(train_ds, batch_size=config["batch_size"], shuffle=True, num_workers=4)
 
         eval_ds = PCamDataset(data_dir, split="valid", transform=eval_transform)
-        eval_ds = Subset(eval_ds, range(config["valid_subset_size"]))
-        eval_loader = DataLoader(eval_ds, batch_size=config["batch_size"], shuffle=False, num_workers=2)
+        # eval_ds = Subset(eval_ds, range(config["valid_subset_size"]))
+        eval_loader = DataLoader(eval_ds, batch_size=config["batch_size"], shuffle=False, num_workers=4)
 
         model = build_model(config["backbone"], pretrained=True)
         freeze_backbone(model)
