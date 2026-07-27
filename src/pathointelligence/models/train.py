@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ast import arg
 from pathlib import Path
 
 import torch
@@ -9,6 +10,7 @@ from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 import mlflow
+import argparse
 
 from pathointelligence.data.dataset import PCamDataset
 from pathointelligence.data.transforms import train_transform, eval_transform
@@ -60,6 +62,10 @@ def evaluate(model, dataloader, device) -> float:
     return auroc
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data-dir", type = str, default="data/raw")
+    args = parser.parse_args()
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"using device: {device}")
 
@@ -80,7 +86,7 @@ def main() -> None:
     with mlflow.start_run():
         mlflow.log_params(config)  # records all settings for this run
 
-        data_dir = Path("data/raw")
+        data_dir = Path(args.data_dir)
         train_ds = PCamDataset(data_dir, split="train", transform=train_transform)
         train_ds = Subset(train_ds, range(config["train_subset_size"]))
         train_loader = DataLoader(train_ds, batch_size=config["batch_size"], shuffle=True, num_workers=2)
