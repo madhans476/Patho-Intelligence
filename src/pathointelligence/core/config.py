@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Object storage (local path for MVP; swap for S3-compatible in Phase 9)
     artifact_storage_path: str = "data/artifacts"
 
+    # Model decision threshold — see docs/ADR/0009
+    decision_threshold: float = 0.211
+
 
 @lru_cache
 def get_settings() -> Settings:
