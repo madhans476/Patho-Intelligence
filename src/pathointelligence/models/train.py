@@ -73,9 +73,9 @@ def main() -> None:
     config = {
         "backbone": "resnet50",
         "batch_size": 128,
-        "stage1_epochs": 3,
+        "stage1_epochs": 4,
         "stage1_lr": 1e-3,
-        "stage2_epochs": 3,
+        "stage2_epochs": 10,
         "stage2_lr": 1e-5,
         # "train_subset_size": 5000,
         # "valid_subset_size": 1000,
@@ -109,6 +109,9 @@ def main() -> None:
         trainable_params = [p for p in model.parameters() if p.requires_grad]
         optimizer = torch.optim.Adam(trainable_params, lr=config["stage1_lr"])
 
+        patience = 2
+        epochs_without_improvement = 0
+
         for epoch in range(1, config["stage1_epochs"] + 1):
             avg_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
             auroc = evaluate(model, eval_loader, device)
@@ -140,7 +143,13 @@ def main() -> None:
             if auroc > best_auroc:
                 best_auroc = auroc
                 torch.save(model.state_dict(), checkpoint_path)
+                epochs_without_improvement = 0
                 print(f"  -> new best AUROC ({auroc:.4f}), checkpoint saved")
+            else:
+                epochs_without_improvement += 1
+                if epochs_without_improvement >= patience:
+                    print(f"  -> no improvement for {patience} epochs, stopping early")
+                    break
 
 if __name__ == "__main__":
     main()
