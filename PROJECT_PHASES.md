@@ -45,6 +45,8 @@ Overall completion percentages are additive and sum to 100% across all phases. T
 
 **Completion:** 15%
 
+**Status:** Done — ResNet50, 2-stage transfer learning, 91.83% AUROC (see ADR 0007)
+
 ---
 
 ## Phase 3 — Model Rigor & Validation
@@ -140,6 +142,14 @@ Overall completion percentages are additive and sum to 100% across all phases. T
 **Tech stack:** `pytest`, `httpx` (API testing), `pytest-cov`, Markdown.
 
 **Completion:** 5%
+
+## Phase 11 — Backbone Comparison (EfficientNet-B0)
+
+**Milestone:** Train the same task using EfficientNet-B0 as the backbone (same 2-stage transfer learning approach), track it as a separate MLflow run, and compare against the ResNet50 baseline (AUROC, parameter count, training time).
+
+**Learning outcome:** How to run controlled experiments — same task, one variable changed — and use experiment tracking to make an honest, evidence-based comparison instead of guessing which backbone is "better."
+
+**Tech stack:** `timm`, `mlflow`.
 
 ---
 
