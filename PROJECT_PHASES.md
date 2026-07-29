@@ -59,6 +59,7 @@ Overall completion percentages are additive and sum to 100% across all phases. T
 
 **Completion:** 10%
 
+**Status:** Mostly done — error analysis, threshold selection (ADR 0009), calibration (ADR 0010), model card complete. Cross-validation deferred (ADR 0011).
 ---
 
 ## Phase 4 — Explainability (Grad-CAM)
