@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import DataLoader
 import tqdm
+import numpy as np
 
 from pathointelligence.data.dataset import PCamDataset
 from pathointelligence.data.transforms import eval_transform
@@ -77,7 +78,59 @@ def visualize_worst_errors(data_dir: Path, n: int = 10) -> None:
     plt.savefig("docs/worst_errors.png", dpi=100)
     plt.show()
 
+def plot_calibration(data_dir: Path) -> None:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    valid_ds = PCamDataset(data_dir, split="valid", transform=eval_transform)
+    valid_loader = DataLoader(valid_ds, batch_size=128, shuffle=False, num_workers=2)
+
+    model = build_model("resnet50", pretrained=False)
+    model.load_state_dict(torch.load("models/checkpoints/best_model.pt", map_location=device))
+    model = model.to(device)
+    model.eval()
+
+    all_labels, all_probs = [], []
+    with torch.no_grad():
+        for images, labels in valid_loader:
+            probs = torch.sigmoid(model(images.to(device)).squeeze(1)).cpu()
+            all_labels.extend(labels.numpy())
+            all_probs.extend(probs.numpy())
+
+    all_labels = np.array(all_labels)
+    all_probs = np.array(all_probs)
+
+    # 10 buckets: 0.0-0.1, 0.1-0.2, ..., 0.9-1.0
+    bucket_edges = np.linspace(0, 1, 11)
+    bucket_centers = []
+    actual_fractions = []
+    bucket_counts = []
+
+    for i in range(10):
+        low, high = bucket_edges[i], bucket_edges[i + 1]
+        # which predictions fall into this confidence bucket
+        in_bucket = (all_probs >= low) & (all_probs < high)
+        count = in_bucket.sum()
+
+        if count == 0:
+            continue  # skip empty buckets, avoid dividing by zero
+
+        actual_fraction = all_labels[in_bucket].mean()  # fraction of THIS bucket that was really tumor
+        bucket_centers.append((low + high) / 2)
+        actual_fractions.append(actual_fraction)
+        bucket_counts.append(count)
+
+    plt.figure(figsize=(6, 6))
+    plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="perfect calibration")
+    plt.plot(bucket_centers, actual_fractions, marker="o", label="our model")
+    plt.xlabel("predicted confidence")
+    plt.ylabel("actual fraction that was tumor")
+    plt.title("Calibration: is a 0.9 confidence actually 90% right?")
+    plt.legend()
+    plt.savefig("docs/calibration.png", dpi=100)
+    plt.show()
+
+    for c, f, n in zip(bucket_centers, actual_fractions, bucket_counts):
+        print(f"predicted ~{c:.2f} (n={n}): actually tumor {f:.2f} of the time")
+
 
 if __name__ == "__main__":
-    main()
-    visualize_worst_errors(Path("data/raw"))
+    plot_calibration(Path("data/raw"))
