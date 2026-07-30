@@ -38,6 +38,11 @@ guaranteed to determine the label).
 digitized at 2 centers. Performance on data from other scanners,
 labs, or staining protocols is unknown and not tested here.
 
+**Visual confusion with dense lymphocyte regions** (Grad-CAM, ADR 0012):
+false positives consistently show the model focusing on dense,
+dark nuclei clusters that visually resemble tumor tissue — suggesting
+the model may confuse lymphocyte-rich regions with actual tumor.
+
 ## Intended Use
 Educational / portfolio project demonstrating an end-to-end medical
 imaging ML pipeline. NOT validated for clinical use. Any real

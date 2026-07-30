@@ -14,6 +14,7 @@ dependencies = [
     "asyncpg>=0.30",
     "python-multipart>=0.0.12",
     "anthropic>=0.40",
+    "xy>=0.0.4",
 ]
 
 [project.scripts]
